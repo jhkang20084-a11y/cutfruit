@@ -555,6 +555,11 @@ class GameEngine {
       const prev = this.tracks[i];
       const a = T.handSmoothing;
       const p = prev ? { x: prev.x + (raw.x - prev.x) * a, y: prev.y + (raw.y - prev.y) * a } : raw;
+      let ang = prev ? prev.ang : -Math.PI / 4;                  // 칼이 가리키는 방향: 움직이는 방향을 부드럽게 따라감
+      if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) > 3) {
+        let d = Math.atan2(p.y - prev.y, p.x - prev.x) - ang; d = Math.atan2(Math.sin(d), Math.cos(d)); ang += d * 0.35;
+      }
+      p.ang = ang;
       p.t = now; p.fastAt = prev ? prev.fastAt : -Infinity;
       p.hist = [...(prev ? prev.hist : []), { x: p.x, y: p.y, t: now }].filter((h) => now - h.t <= T.specialHistory);
       if (prev && this.state === 'playing') {
@@ -872,6 +877,27 @@ class GameEngine {
     this.fx.draw(c);
     c.restore();
     this.fx.drawOverlay(c, this.w, this.h);
+    this.drawCursors(c);
+  }
+
+  // 휘두르지 않을 때도 검지 끝 위치를 보여 주는 칼 모양 커서 (손이 보이는 동안만).
+  // 칼끝이 정확히 검지 끝이고, 움직이는 방향을 향합니다. 왼쪽 손은 청록, 오른쪽 손은 주황 손잡이.
+  drawCursors(c) {
+    if (!this.handMode || this.handSince() > 0.3) return;
+    const k = Math.max(0.8, Math.min(1.4, Math.min(this.w, this.h) / 500));
+    this.tracks.forEach((tr, i) => {
+      const col = i === 0 ? '#3ef0e0' : '#ffb627';
+      c.save(); c.translate(tr.x, tr.y); c.rotate(tr.ang); c.scale(k, k); c.lineJoin = 'round';
+      c.shadowColor = col; c.shadowBlur = 12;
+      const blade = c.createLinearGradient(0, -8, 0, 8); blade.addColorStop(0, '#ffffff'); blade.addColorStop(0.5, '#cfd8dc'); blade.addColorStop(1, '#90a4ae');
+      c.fillStyle = blade; c.beginPath(); c.moveTo(0, 0); c.lineTo(-14, -7); c.lineTo(-58, -7); c.lineTo(-58, 7); c.lineTo(-14, 7); c.closePath(); c.fill();   // 칼날
+      c.shadowBlur = 0; c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(-52, -1, 40, 2);                                                                        // 날의 빛
+      c.fillStyle = '#ffd54f'; c.fillRect(-64, -13, 8, 26);                                                                                                  // 날밑
+      c.fillStyle = '#37294f'; c.fillRect(-92, -5, 28, 10); c.fillStyle = col; for (const x of [-86, -76, -66]) c.fillRect(x, -5, 3, 10);                       // 손잡이
+      c.fillStyle = '#ffd54f'; c.beginPath(); c.arc(-94, 0, 6, 0, 7); c.fill();                                                                               // 꼭지
+      c.restore();
+      c.save(); c.shadowColor = col; c.shadowBlur = 14; c.fillStyle = '#fff'; c.beginPath(); c.arc(tr.x, tr.y, 3.5, 0, 7); c.fill(); c.restore();            // 칼끝(검지 끝) 점
+    });
   }
 }
 
