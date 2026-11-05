@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#120d22">
+<title>검지 베기 - 웹캠 과일 자르기</title>
+<style>
+:root{
+  --bg:#120d22; --panel:#1d1535; --line:#3a2d63;
+  --text:#f4efff; --dim:#a79cc9;
+  --slash:#3ef0e0; --citrus:#ffb627; --berry:#ff3d71;
+  font-family:"Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;touch-action:manipulation}
+#app{position:fixed;inset:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.screen{position:absolute;inset:0;display:none}
+.screen.active{display:flex}
+#screen-start{flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;overflow:auto;
+  background:radial-gradient(60% 50% at 50% 0%,#2b1d52 0%,var(--bg) 70%)}
+.logo{font-size:clamp(48px,12vw,96px);font-weight:900;letter-spacing:-.04em;line-height:1}
+.logo span{color:var(--slash);text-shadow:0 0 24px rgba(62,240,224,.55);margin-left:.1em}
+.tagline{color:var(--dim);font-size:clamp(15px,3.4vw,19px)}
+.modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:min(560px,100%);margin-top:8px}
+.mode{display:flex;flex-direction:column;gap:3px;text-align:left;padding:14px 16px;border-radius:14px;
+  background:var(--panel);border:2px solid var(--line);color:var(--text);font:inherit;cursor:pointer;min-height:64px}
+.mode small{color:var(--dim);font-size:13px}
+.mode[aria-checked="true"]{border-color:var(--slash);box-shadow:0 0 0 3px rgba(62,240,224,.18)}
+.best{color:var(--citrus);font-weight:700;min-height:1.4em}
+.notice{max-width:520px;text-align:center;color:var(--dim);font-size:13px;line-height:1.5}
+.btn{font:inherit;font-weight:800;padding:12px 22px;border-radius:12px;border:2px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;min-height:46px}
+.btn.primary{background:var(--slash);border-color:var(--slash);color:#06201d;font-size:20px;padding:14px 40px}
+.btn.small{padding:8px 14px;min-height:40px;font-size:14px}
+.btn:focus-visible,.mode:focus-visible{outline:3px solid var(--citrus);outline-offset:2px}
+
+#screen-game{flex-direction:column}
+.hud{display:flex;align-items:center;gap:clamp(10px,3vw,28px);padding:10px 14px;background:rgba(18,13,34,.85);border-bottom:1px solid var(--line);z-index:2}
+.hud-item{display:flex;flex-direction:column;min-width:0}
+.hud-label{font-size:12px;color:var(--dim)}
+.hud-item b{font-size:clamp(20px,5vw,30px);font-variant-numeric:tabular-nums;line-height:1.1}
+.hud-item.energy{flex:1;min-width:70px}
+.bar{height:12px;border-radius:99px;background:var(--panel);border:1px solid var(--line);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--slash),var(--citrus))}
+#stage{flex:1;width:100%;min-height:0;display:block;touch-action:none;cursor:crosshair}
+.overlay-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;
+  font-size:clamp(80px,26vw,220px);font-weight:900;color:var(--citrus);text-shadow:0 0 40px rgba(255,182,39,.6)}
+.modal{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,7,22,.78);z-index:5;padding:16px}
+.modal[hidden]{display:none}
+.card{display:flex;flex-direction:column;gap:12px;align-items:stretch;width:min(420px,100%);padding:24px;border-radius:18px;background:var(--panel);border:2px solid var(--line)}
+.card h2{text-align:center;font-size:26px}
+.record{text-align:center;color:var(--citrus);font-weight:900}
+.stats{display:grid;grid-template-columns:1fr auto;gap:8px 16px}
+.stats dt{color:var(--dim)} .stats dd{font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+.fine{font-size:12px;color:var(--dim);line-height:1.5}
+@media (max-width:480px){
+  .hud{flex-wrap:wrap;gap:8px 14px}
+  .hud-item.energy{order:5;flex-basis:100%}
+  #btn-pause{margin-left:auto}
+  .modes{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.cam-box{display:flex;flex-direction:column;align-items:center;gap:8px;max-width:520px}
+.cam-status{color:var(--dim);font-size:13px;text-align:center;line-height:1.5}
+.chip{padding:6px 10px;border-radius:99px;border:2px solid var(--line);font-size:13px;font-weight:800;white-space:nowrap}
+.chip[data-kind="ok"]{border-color:var(--slash);color:var(--slash)}
+.chip[data-kind="warn"]{border-color:var(--citrus);color:var(--citrus)}
+.chip[data-kind="bad"]{border-color:var(--berry);color:var(--berry)}
+.preview{position:fixed;right:max(10px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));z-index:6;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.preview[hidden]{display:none}
+.preview-frame{position:relative;width:160px;height:120px;border-radius:12px;overflow:hidden;border:2px solid var(--line);background:#000}
+.preview-frame video,.preview-frame canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.preview-frame video{transform:scaleX(-1)}
+.preview.dim .preview-frame{opacity:0;pointer-events:none}
+@media (max-width:480px){.preview-frame{width:112px;height:84px}.chip{order:4}}
+
+.hud-item.energy.full .bar{box-shadow:0 0 14px var(--citrus);border-color:var(--citrus)}
+.hud-item.energy.full .hud-label{color:var(--citrus);font-weight:800}
+
+.modal-top{z-index:9}
+.row{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer}
+.row input{width:22px;height:22px;accent-color:var(--slash)}
+.row-group{border:2px solid var(--line);border-radius:12px;padding:4px 12px 6px}
+.row-group legend{padding:0 6px;color:var(--dim);font-size:13px}
+.card{max-height:calc(100% - 24px);overflow:auto}
+
+</style>
+</head>
+<body>
+<main id="app">
+
+  <!-- 시작 화면 -->
+  <section id="screen-start" class="screen active">
+    <h1 class="logo">검지<span>베기</span></h1>
+    <p class="tagline">손가락 끝으로 과일을 가르세요</p>
+    <div class="modes" role="radiogroup" aria-label="게임 모드">
+      <button class="mode" data-mode="timeattack" role="radio" aria-checked="true"><b>타임 어택</b><small>60초 안에 최고 점수</small></button>
+      <button class="mode" data-mode="survival" role="radio" aria-checked="false"><b>서바이벌</b><small>목숨 3개, 폭탄 주의</small></button>
+      <button class="mode" data-mode="endless" role="radio" aria-checked="false"><b>엔드리스</b><small>갈수록 빨라져요</small></button>
+      <button class="mode" data-mode="hybrid" role="radio" aria-checked="false"><b>하이브리드</b><small>60초 + 목숨 3개</small></button>
+    </div>
+    <p id="best-line" class="best"></p>
+    <button id="btn-start" class="btn primary">게임 시작</button>
+    <button id="btn-settings" class="btn">설정 · 도움말</button>
+    <div class="cam-box">
+      <button id="btn-cam" class="btn">카메라 켜고 손 인식 테스트</button>
+      <p id="cam-status" class="cam-status" role="status">손 인식으로 게임하려면 카메라가 필요해요. 영상은 이 기기에서만 처리되고 저장·전송되지 않아요.</p>
+    </div>
+    <p class="notice">카메라를 켜지 않고 시작하면 마우스 드래그로 연습 모드가 실행됩니다.</p>
+  </section>
+
+  <!-- 게임 화면 -->
+  <section id="screen-game" class="screen">
+    <header class="hud">
+      <div class="hud-item"><span class="hud-label">점수</span><b id="hud-score">0</b></div>
+      <div class="hud-item"><span class="hud-label" id="hud-limit-label">시간</span><b id="hud-limit">60</b></div>
+      <div class="hud-item"><span class="hud-label">콤보</span><b id="hud-combo">0</b></div>
+      <div class="hud-item energy" id="hud-energy-box"><span class="hud-label" id="hud-energy-label">에너지</span><div class="bar"><i id="hud-energy"></i></div></div>
+      <button id="btn-special" class="btn small" hidden>특수 공격 (연습용)</button>
+      <span id="hud-hand" class="chip" data-kind="off" role="status">손 인식: 꺼짐</span>
+      <button id="btn-pause" class="btn small" aria-label="일시 정지">일시 정지</button>
+    </header>
+    <canvas id="stage"></canvas>
+    <div id="countdown" class="overlay-text" aria-live="assertive"></div>
+
+    <div id="pause" class="modal" hidden>
+      <div class="card">
+        <h2 id="pause-title">일시 정지</h2>
+        <p id="pause-msg" class="fine" role="status"></p>
+        <button id="btn-resume" class="btn primary">계속하기</button>
+        <button id="btn-settings-pause" class="btn">설정 · 도움말</button>
+        <button id="btn-quit" class="btn">시작 화면으로</button>
+      </div>
+    </div>
+
+    <div id="result" class="modal" hidden>
+      <div class="card">
+        <h2 id="result-title">결과</h2>
+        <p id="result-record" class="record" hidden>최고 기록 갱신!</p>
+        <dl class="stats" id="result-stats"></dl>
+        <p class="fine">정확도 = 자른 과일 ÷ (자른 과일 + 놓친 과일). 손 인식 정확도가 아니라 과일 처리 정확도입니다.</p>
+        <button id="btn-retry" class="btn primary">다시 하기</button>
+        <button id="btn-home" class="btn">시작 화면으로</button>
+      </div>
+    </div>
+  </section>
+
+<div id="settings" class="modal modal-top" hidden role="dialog" aria-labelledby="settings-title">
+  <div class="card">
+    <h2 id="settings-title">설정 · 도움말</h2>
+    <label class="row"><input type="checkbox" id="set-bgm"> 배경음</label>
+    <label class="row"><input type="checkbox" id="set-sfx"> 효과음</label>
+    <label class="row"><input type="checkbox" id="set-preview"> 웹캠 미리보기 표시</label>
+    <fieldset class="row-group"><legend>폭탄 효과</legend>
+      <label class="row"><input type="radio" name="bombfx" value="basic"> 기본 경고형</label>
+      <label class="row"><input type="radio" name="bombfx" value="fancy"> 화려한 폭발형</label>
+    </fieldset>
+    <p id="set-cam" class="fine" role="status">카메라 상태: 꺼짐</p>
+    <p class="fine"><b>조작법</b> 카메라 앞에서 검지를 빠르게 움직여 과일을 가르세요. 에너지가 가득 차면 양손 검지를 동시에 빠르게 움직여 특수 공격! 폭탄 💣은 피하세요.</p>
+    <button id="btn-settings-close" class="btn primary">닫기</button>
+  </div>
+</div>
+</main>
+<div id="preview" class="preview" hidden>
+  <div class="preview-frame"><video id="cam-video" playsinline muted></video><canvas id="cam-dots" width="160" height="120"></canvas></div>
+  <button id="btn-preview" class="btn small">미리보기 숨기기</button>
+</div>
+<script>
+// 모든 조정 가능한 수치는 여기에 모아 둡니다. 밸런스를 바꾸고 싶으면 이 파일만 수정하세요.
+const MODES = {
+  timeattack: { name: '타임 어택', timeLimit: 60, lives: null, bombScore: -50 },
+  survival:   { name: '서바이벌',  timeLimit: null, lives: 3,   bombScore: 0 },
+  endless:    { name: '엔드리스',  timeLimit: null, lives: 3,   bombScore: 0, ramp: true },
+  hybrid:     { name: '하이브리드', timeLimit: 60,   lives: 3,   bombScore: 0 },
+};
+
+const TUNING = {
+  countdownSeconds: 3,       // 3, 2, 1 이후 GO!
+  goDisplaySeconds: 0.6,
+  maxDeltaTime: 0.05,        // 프레임이 튀어도 한 번에 이 이상 진행하지 않음
+  gravity: 1.1,              // 화면 높이 기준 (높이/초²)
+  spawnIntervalStart: 1.1,   // 초
+  spawnIntervalMin: 0.45,
+  rampPerSecond: 0.012,      // 시간이 갈수록 빨라지는 정도
+  maxObjects: 12,
+  maxPieces: 60,             // 동시에 존재하는 과일 조각 최대 개수
+  pieceScore: 2,             // 이미 잘린 조각을 다시 자를 때 점수
+  pieceMaxGen: 3,            // 한 과일을 최대 몇 번까지 나눌 수 있는지 (3 = 처음 자르기 포함 3번, 최대 8조각)
+  pieceLife: 1.6,            // 조각이 사라지기까지 시간(초)
+  minSlashSpeed: 0.5,        // 손가락이 이 속도(화면 높이/초) 이상일 때만 베기로 인정
+  handLostPause: 2,          // 손을 이 시간(초) 이상 놓치면 자동 일시 정지
+  handSmoothing: 0.7,        // 0~1, 클수록 반응이 빠르고 떨림이 큼
+  bombChance: 0.14,
+  goldChance: 0.08,
+  iceChance: 0.07,
+  iceDuration: 3,            // 얼음 과일 효과 지속(초)
+  iceSlow: 0.3,              // 얼음 중 과일 속도 배율 (0.3 = 30%)
+  fruitScore: 10,
+  goldScore: 50,
+  comboWindow: 1.2,          // 초: 이 안에 다음 과일을 자르면 콤보 유지
+  energyPerFruit: 4,
+  energyGold: 15,
+  energyMax: 100,
+  energyComboBonus: 2,       // 5콤보마다 추가로 충전되는 양
+  // --- 특수 공격(양손) ---
+  specialMinSpeed: 1.2,      // 각 손가락의 최소 속도(화면 높이/초)
+  specialSimulWindow: 0.15,  // 두 손이 이 시간(초) 안에 함께 빨라야 함
+  specialCooldown: 1.5,      // 재발동 방지(초)
+  specialHistory: 0.25,      // 베기 방향 계산에 쓰는 최근 이동 기록(초)
+  specialFxTime: 0.5,        // 교차 베기 효과 표시 시간(초)
+};
+
+const T = TUNING;
+const FRUITS = [
+  { id: 'apple', emoji: '🍎', color: '#ff4d4d' }, { id: 'orange', emoji: '🍊', color: '#ffa534' },
+  { id: 'melon', emoji: '🍉', color: '#ff5a7a' }, { id: 'lemon', emoji: '🍋', color: '#ffe14d' },
+];
+
+// 저장 기능. 실패해도 게임은 멈추지 않습니다. 나중에 온라인 랭킹으로 바꿀 때 이 파일의 함수만 교체하세요.
+const KEY = 'fruitslash.v1';
+function read() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+}
+function write(data) {
+  try { localStorage.setItem(KEY, JSON.stringify(data)); return true; }
+  catch (e) { console.warn('[storage] 저장 실패:', e); return false; }
+}
+const storage = {
+  getBest(mode) { return read().best?.[mode] ?? 0; },
+  setBest(mode, score) {
+    const d = read(); d.best = d.best || {};
+    if (score > (d.best[mode] ?? 0)) { d.best[mode] = score; write(d); return true; }
+    return false;
+  },
+  getSettings() { return read().settings || {}; },
+  setSettings(s) { const d = read(); d.settings = { ...d.settings, ...s }; write(d); },
+};
+
+// 선분(손가락 이동 경로)과 원(과일 충돌 영역)이 교차하는지 검사합니다.
+function segmentHitsCircle(x1, y1, x2, y2, cx, cy, r) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq === 0 ? 0 : ((cx - x1) * dx + (cy - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const px = x1 + t * dx - cx, py = y1 + t * dy - cy;
+  return px * px + py * py <= r * r;
+}
+
+// 과일·폭탄 이미지. 직접 그린 벡터(SVG)라서 저작권/라이선스 걱정이 없고, 외부에서 내려받을 파일도 없습니다.
+// 나중에 실제 사진/일러스트로 바꾸려면 아래 SVG 대신 이미지 파일 주소를 넣으면 됩니다. (whole = 통과일, inner = 잘린 단면)
+const svg = (body, defs = '') => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="200" height="200"><defs>${defs}</defs>${body}</svg>`;
+const grad = (id, c0, c1, c2) => `<radialGradient id="${id}" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="${c0}"/><stop offset=".55" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></radialGradient>`;
+const lines = (n, r, color, w) => Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; return `<line x1="50" y1="50" x2="${50 + Math.cos(a) * r}" y2="${50 + Math.sin(a) * r}" stroke="${color}" stroke-width="${w}"/>`; }).join('');
+const seeds = (pts, color) => pts.map(([x, y, a]) => `<ellipse cx="${x}" cy="${y}" rx="2" ry="3.4" fill="${color}" transform="rotate(${a} ${x} ${y})"/>`).join('');
+
+const ART = {
+  apple: {
+    whole: svg(`<path d="M50 24C36 14 12 22 12 52c0 26 18 40 30 38 4-1 6-2 8-2s4 1 8 2c12 2 30-12 30-38 0-30-24-38-38-28z" fill="url(#g)"/><path d="M50 24c0-8 2-14 8-18" stroke="#6d4c2f" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M54 14C62 4 76 6 80 12 72 20 60 20 54 14z" fill="#4caf50"/><ellipse cx="29" cy="40" rx="6" ry="12" fill="#fff" opacity=".35" transform="rotate(20 29 40)"/>`, grad('g', '#ff8a80', '#e53935', '#9e1b1b')),
+    inner: svg(`<circle cx="50" cy="50" r="40" fill="#c62828"/><circle cx="50" cy="50" r="36" fill="#fff3cf"/><ellipse cx="50" cy="50" rx="10" ry="15" fill="#e8d9a0"/>${seeds([[46, 48, -15], [54, 48, 15], [50, 56, 0]], '#5d3a1a')}`),
+  },
+  orange: {
+    whole: svg(`<circle cx="50" cy="52" r="40" fill="url(#g)"/>${[[30, 40], [58, 34], [70, 56], [40, 68], [55, 78], [24, 60]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.6" fill="#e65100" opacity=".5"/>`).join('')}<circle cx="50" cy="13" r="3" fill="#558b2f"/><path d="M52 14C60 4 74 8 76 14 68 20 58 20 52 14z" fill="#66bb6a"/><ellipse cx="32" cy="38" rx="6" ry="11" fill="#fff" opacity=".35" transform="rotate(25 32 38)"/>`, grad('g', '#ffcc80', '#fb8c00', '#e65100')),
+    inner: svg(`<circle cx="50" cy="50" r="40" fill="#f57c00"/><circle cx="50" cy="50" r="36" fill="#ffe0b2"/><circle cx="50" cy="50" r="32" fill="#ffa726"/>${lines(8, 32, '#ffe0b2', 2.5)}<circle cx="50" cy="50" r="3" fill="#ffe0b2"/>`),
+  },
+  melon: {
+    whole: svg(`<circle cx="50" cy="50" r="40" fill="url(#g)"/>${[-22, -9, 4, 17, 30].map((o) => `<path d="M${50 + o * 0.3} 11C${22 + o} 32 ${22 + o} 68 ${50 + o * 0.3} 89" stroke="#a5d6a7" stroke-width="4" fill="none" opacity=".55"/>`).join('')}<ellipse cx="32" cy="34" rx="6" ry="11" fill="#fff" opacity=".3" transform="rotate(25 32 34)"/>`, grad('g', '#66bb6a', '#2e7d32', '#1b5e20')),
+    inner: svg(`<circle cx="50" cy="50" r="40" fill="#2e7d32"/><circle cx="50" cy="50" r="37" fill="#c8e6c9"/><circle cx="50" cy="50" r="34" fill="#ef5350"/>${seeds([[38, 40, 20], [58, 38, -20], [48, 54, 0], [34, 58, 30], [64, 58, -30], [50, 40, 0], [44, 66, 10]], '#212121')}`),
+  },
+  lemon: {
+    whole: svg(`<ellipse cx="50" cy="52" rx="41" ry="33" fill="url(#g)"/><ellipse cx="9" cy="52" rx="5" ry="4" fill="#f9a825"/><ellipse cx="91" cy="52" rx="5" ry="4" fill="#f9a825"/><path d="M52 20C58 10 70 10 74 16 66 22 58 24 52 20z" fill="#66bb6a"/><ellipse cx="32" cy="40" rx="6" ry="9" fill="#fff" opacity=".4" transform="rotate(25 32 40)"/>`, grad('g', '#fff59d', '#fdd835', '#f9a825')),
+    inner: svg(`<ellipse cx="50" cy="52" rx="41" ry="34" fill="#fbc02d"/><ellipse cx="50" cy="52" rx="37" ry="30" fill="#fff9c4"/><ellipse cx="50" cy="52" rx="33" ry="26" fill="#fff176"/>${lines(8, 34, '#fff9c4', 2.5).replace(/x2="([\d.]+)" y2="([\d.]+)"/g, (m, x, y) => `x2="${50 + (x - 50) * 1.1}" y2="${52 + (y - 50) * 0.85}"`).replace(/y1="50"/g, 'y1="52"')}`),
+  },
+  ice: {
+    whole: svg(`<rect x="12" y="12" width="76" height="76" rx="18" fill="url(#g)" stroke="#b3e5fc" stroke-width="3"/><path d="M26 30l16-8M24 44l8-4" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".8"/><path d="M62 66l12-6M58 76l6-3" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".5"/><path d="M50 26v48M26 50h48" stroke="#e1f5fe" stroke-width="1.5" opacity=".6"/>`, grad('g', '#e1f5fe', '#81d4fa', '#29b6f6')),
+    inner: svg(`<rect x="12" y="12" width="76" height="76" rx="18" fill="#b3e5fc"/><rect x="20" y="20" width="60" height="60" rx="12" fill="#e1f5fe"/><path d="M50 22L44 44 56 54 46 78M44 44L28 50M56 54L74 48" stroke="#81d4fa" stroke-width="2.5" fill="none" stroke-linejoin="round"/>`),
+  },
+  gold: {
+    whole: svg(`<circle cx="50" cy="50" r="41" fill="url(#g)" stroke="#fff176" stroke-width="3"/><path d="M50 22l7.5 17 18.5 2-14 12.5 4.5 18L50 62l-16.5 9.5 4.5-18L24 41l18.5-2z" fill="#fff8d0" opacity=".9"/><ellipse cx="30" cy="34" rx="6" ry="10" fill="#fff" opacity=".5" transform="rotate(25 30 34)"/>`, grad('g', '#fff59d', '#ffc107', '#b8860b')),
+    inner: svg(`<circle cx="50" cy="50" r="41" fill="#b8860b"/><circle cx="50" cy="50" r="36" fill="#ffe082"/><path d="M50 30l5 12 13 1.5-10 9 3 13-11-7-11 7 3-13-10-9 13-1.5z" fill="#fff8d0"/>`),
+  },
+  bomb: {
+    whole: svg(`<circle cx="50" cy="56" r="36" fill="url(#g)" stroke="#ff3d71" stroke-width="3.5"/><rect x="40" y="14" width="20" height="12" rx="3" fill="#455a64"/><path d="M50 14c0-8 8-10 14-6" stroke="#bf9b6a" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M68 4l3 6 6 1-5 4 1 6-5-3-5 3 1-6-5-4 6-1z" fill="#ffca28"/><ellipse cx="36" cy="44" rx="7" ry="11" fill="#fff" opacity=".25" transform="rotate(25 36 44)"/><path d="M38 64l24 0M50 52v24" stroke="#ff3d71" stroke-width="4" stroke-linecap="round" opacity=".9" transform="rotate(45 50 64)"/>`, grad('g', '#78909c', '#263238', '#0b1115')),
+    inner: svg(`<circle cx="50" cy="56" r="36" fill="#263238"/>`),
+  },
+};
+
+const sprites = {};
+for (const [key, parts] of Object.entries(ART)) {
+  sprites[key] = {};
+  for (const [part, markup] of Object.entries(parts)) {
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup);
+    sprites[key][part] = img;
+  }
+}
+
+// 오브젝트(과일/폭탄/조각)에 맞는 이미지를 그립니다. 이미지가 아직 없으면 이모지로 대신합니다.
+function drawSprite(c, obj, part, r) {
+  const key = obj.kind === 'bomb' || obj.kind === 'gold' || obj.kind === 'ice' ? obj.kind : obj.fruit.id;
+  const img = sprites[key]?.[part];
+  const s = r * 2.5;     // 이미지 속 원 반지름이 약 40/100 이므로 충돌 영역(r)과 크기가 맞습니다
+  if (img && img.complete && img.naturalWidth) c.drawImage(img, -s / 2, -s / 2, s, s);
+  else { c.font = `${r * 1.8}px serif`; c.fillText(obj.kind === 'bomb' ? '💣' : obj.fruit.emoji, 0, 0); }
+}
+
+// 과즙, 파티클, 화면 흔들림, 번쩍임, 큰 문구. 게임 규칙은 모릅니다.
+class Effects {
+  constructor() { this.reset(); }
+  reset() { this.p = []; this.shakeT = 0; this.shakeDur = 1; this.shakePow = 0; this.flashA = 0; this.flashDur = 1; this.flashColor = '#fff'; this.banner = null; }
+
+  get maxParticles() { return (innerWidth < 600 || (navigator.hardwareConcurrency || 8) <= 4) ? 120 : 260; }   // 폰에서는 적게
+
+  _add(q) { if (this.p.length >= this.maxParticles) this.p.shift(); this.p.push(q); }
+
+  burst(x, y, color, n, { speed = 300, angle = 0, spread = Math.PI * 2, life = 0.6, size = 4, gravity = 1 } = {}) {
+    for (let i = 0; i < n; i++) {
+      const a = angle + (Math.random() - 0.5) * spread, v = speed * (0.4 + Math.random() * 0.8);
+      this._add({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: life * (0.6 + Math.random() * 0.6), size: size * (0.6 + Math.random()), color, g: gravity });
+    }
+  }
+  // 과즙: 베는 방향의 수직 양쪽으로 튀고, 약간 더 흩뿌려집니다.
+  juice(x, y, color, angle) {
+    for (const s of [1, -1]) this.burst(x, y, color, 8, { angle: angle + s * Math.PI / 2, spread: 1.4, speed: 360, size: 5 });
+    this.burst(x, y, color, 6, { speed: 200, size: 3 });
+  }
+  sparkle(x, y, color, n) { this.burst(x, y, color, n, { speed: 260, life: 0.8, size: 3, gravity: 0.2 }); }
+  shake(pow, dur) { if (pow >= this.shakePow || this.shakeT <= 0) { this.shakePow = pow; this.shakeT = dur; this.shakeDur = dur; } }
+  flash(color, alpha, dur) { this.flashColor = color; this.flashA = alpha; this.flashDur = dur; this.flashT = dur; }
+  showBanner(text, color) { this.banner = { text, color, t: 0 }; }
+
+  update(dt, h) {
+    for (const q of this.p) { q.vy += q.g * h * 1.4 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.life += dt; }
+    this.p = this.p.filter((q) => q.life < q.max && q.y < h + 40);
+    if (this.shakeT > 0) this.shakeT -= dt;
+    if (this.flashT > 0) this.flashT -= dt;
+    if (this.banner && (this.banner.t += dt) > 0.9) this.banner = null;
+  }
+  offset() {
+    if (this.shakeT <= 0) return [0, 0];
+    const k = this.shakeT / this.shakeDur, m = this.shakePow * k;
+    return [(Math.random() - 0.5) * 2 * m, (Math.random() - 0.5) * 2 * m];
+  }
+  draw(c) {
+    for (const q of this.p) { c.globalAlpha = Math.max(0, 1 - q.life / q.max); c.fillStyle = q.color; c.beginPath(); c.arc(q.x, q.y, q.size, 0, 7); c.fill(); }
+    c.globalAlpha = 1;
+  }
+  drawOverlay(c, w, h) {
+    if (this.flashT > 0) { c.globalAlpha = this.flashA * (this.flashT / this.flashDur); c.fillStyle = this.flashColor; c.fillRect(0, 0, w, h); c.globalAlpha = 1; }
+    const b = this.banner;
+    if (b) {
+      const pop = 1 + Math.max(0, 0.35 * (1 - b.t / 0.2)), a = b.t > 0.6 ? 1 - (b.t - 0.6) / 0.3 : 1;
+      c.save(); c.globalAlpha = Math.max(0, a); c.translate(w / 2, h * 0.32); c.scale(pop, pop);
+      c.font = `900 ${Math.min(w * 0.13, 64)}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.lineWidth = 8; c.strokeStyle = 'rgba(18,13,34,.85)'; c.strokeText(b.text, 0, 0); c.fillStyle = b.color; c.fillText(b.text, 0, 0); c.restore();
+    }
+  }
+}
+
+// 효과음과 배경음. 외부 파일 없이 Web Audio API로 직접 소리를 만듭니다. (저작권 걱정 없음)
+// 브라우저 정책 때문에 사용자의 첫 터치/클릭 이후(unlock)에야 소리가 납니다.
+class AudioManager {
+  constructor() {
+    this.ctx = null; this.master = null; this.voices = 0; this.last = {};
+    this.bgmOn = true; this.sfxOn = true; this.bgmTimer = 0; this.step = 0;
+  }
+
+  unlock() {
+    if (!this.ctx) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC(); this.master = this.ctx.createGain(); this.master.gain.value = 0.6; this.master.connect(this.ctx.destination);
+      } catch (e) { console.warn('[audio] 초기화 실패', e); return; }
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+  }
+
+  setBgm(on) { this.bgmOn = on; if (!on) this.stopBgm(); }
+  setSfx(on) { this.sfxOn = on; }
+
+  _tone(freq, dur, { type = 'sine', vol = 0.25, slide = 0, delay = 0, dest = null } = {}) {
+    const c = this.ctx, t = c.currentTime + delay;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(dest || this.master); o.start(t); o.stop(t + dur + 0.02);
+    this.voices++; o.onended = () => { this.voices--; };
+  }
+
+  _noise(dur, { vol = 0.3, freq = 1800, delay = 0 } = {}) {
+    const c = this.ctx, t = c.currentTime + delay, n = Math.floor(c.sampleRate * dur);
+    const buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; g.gain.value = vol;
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t);
+    this.voices++; s.onended = () => { this.voices--; };
+  }
+
+  // 소리 이름: slice, combo, gold, ice, bomb, special, tick, go, energy, gameOver, record
+  play(name, arg = 0) {
+    if (!this.sfxOn || !this.ctx || this.ctx.state !== 'running') return;
+    const now = performance.now();
+    if (now - (this.last[name] || 0) < 45) return;      // 같은 소리가 너무 촘촘히 겹치지 않게
+    if (this.voices > 12) return;                         // 동시 재생 수 제한
+    this.last[name] = now;
+    switch (name) {
+      case 'slice': this._noise(0.12, { vol: 0.28, freq: 2400 + arg * 80 }); this._tone(520 + arg * 40, 0.1, { type: 'triangle', vol: 0.12, slide: 300 }); break;
+      case 'combo': this._tone(660 + Math.min(arg, 12) * 40, 0.14, { type: 'square', vol: 0.12 }); this._tone(990 + Math.min(arg, 12) * 40, 0.18, { type: 'square', vol: 0.1, delay: 0.07 }); break;
+      case 'gold': [880, 1175, 1568].forEach((f, i) => this._tone(f, 0.2, { type: 'triangle', vol: 0.18, delay: i * 0.06 })); break;
+      case 'ice': this._tone(1400, 0.35, { type: 'sine', vol: 0.18, slide: -500 }); this._tone(2100, 0.25, { type: 'sine', vol: 0.1, delay: 0.04 }); break;
+      case 'bomb': this._noise(0.5, { vol: 0.5, freq: 300 }); this._tone(120, 0.45, { type: 'sawtooth', vol: 0.3, slide: -80 }); break;
+      case 'special': this._noise(0.35, { vol: 0.4, freq: 3000 }); this._tone(300, 0.4, { type: 'sawtooth', vol: 0.2, slide: 900 }); break;
+      case 'tick': this._tone(700, 0.12, { type: 'square', vol: 0.15 }); break;
+      case 'go': this._tone(1050, 0.4, { type: 'square', vol: 0.18 }); break;
+      case 'energy': [523, 659, 784, 1047].forEach((f, i) => this._tone(f, 0.18, { type: 'triangle', vol: 0.18, delay: i * 0.07 })); break;
+      case 'gameOver': [440, 370, 311, 220].forEach((f, i) => this._tone(f, 0.3, { type: 'sawtooth', vol: 0.15, delay: i * 0.18 })); break;
+      case 'record': [523, 659, 784, 1047, 1319].forEach((f, i) => this._tone(f, 0.25, { type: 'triangle', vol: 0.2, delay: i * 0.1 })); break;
+    }
+  }
+
+  // 배경음: 짧은 아르페지오를 반복합니다. 일시 정지하면 멈추고, 재개하면 다시 시작합니다.
+  startBgm() {
+    if (!this.bgmOn || !this.ctx || this.bgmTimer) return;
+    const notes = [220, 262, 330, 392, 330, 262, 294, 349, 440, 349, 294, 262];
+    this.bgmTimer = setInterval(() => {
+      if (this.ctx.state !== 'running') return;
+      const f = notes[this.step % notes.length];
+      this._tone(f, 0.22, { type: 'triangle', vol: 0.06 });
+      if (this.step % 4 === 0) this._tone(f / 2, 0.45, { type: 'sine', vol: 0.09 });
+      this.step++;
+    }, 220);
+  }
+  stopBgm() { clearInterval(this.bgmTimer); this.bgmTimer = 0; }
+}
+
+// 손 추적 모듈. MediaPipe Hand Landmarker를 감싸고 있어서, 나중에 다른 라이브러리로 바꿀 때 이 파일만 고치면 됩니다.
+// 바깥에는 start(video) / stop() / onFrame(hands) 만 보여줍니다. hands = [{x, y}] (0~1, 좌우 반전 적용된 검지 끝)
+const LIB = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+function fail(code, message, cause) { const e = new Error(message); e.code = code; e.cause = cause; return e; }
+
+class HandTracker {
+  constructor() { this.active = false; this.stream = null; this.lm = null; this.raf = 0; this.onFrame = () => {}; this.onPhase = () => {}; }
+
+  async start(video) {
+    if (this.active) return;
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw fail('insecure', 'HTTPS가 아니거나 카메라를 지원하지 않는 브라우저입니다.');
+    this.onPhase('카메라 권한을 요청하는 중…');
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    } catch (e) {
+      const map = { NotAllowedError: 'denied', SecurityError: 'denied', NotFoundError: 'nocamera', OverconstrainedError: 'nocamera', NotReadableError: 'busy', AbortError: 'busy' };
+      throw fail(map[e.name] || 'camera-other', e.message, e);
+    }
+    video.srcObject = this.stream; this.video = video;
+    try { await video.play(); } catch (e) { console.warn('[hand] video.play 실패', e); }
+    this.onPhase('손 인식 모델을 불러오는 중… (처음에는 몇 초 걸려요)');
+    try { this.lm = await this._createLandmarker(); }
+    catch (e) { this._releaseCamera(); throw fail('lib-load', '손 인식 라이브러리를 불러오지 못했습니다.', e); }
+    this.active = true; this.lastT = -1; this.errCount = 0;
+    this._loop();
+  }
+
+  async _createLandmarker() {
+    const { FilesetResolver, HandLandmarker } = await import(LIB + '/vision_bundle.mjs');
+    const files = await FilesetResolver.forVisionTasks(LIB + '/wasm');
+    const make = (delegate) => HandLandmarker.createFromOptions(files, {
+      baseOptions: { modelAssetPath: MODEL, delegate }, runningMode: 'VIDEO', numHands: 2,
+    });
+    try { return await make('GPU'); } catch (e) { console.warn('[hand] GPU 실패, CPU로 재시도', e); return make('CPU'); }
+  }
+
+  _loop() {
+    this.raf = requestAnimationFrame(() => this._loop());
+    const v = this.video;
+    if (v.readyState < 2 || v.currentTime === this.lastT) return;
+    this.lastT = v.currentTime;
+    try {
+      const res = this.lm.detectForVideo(v, performance.now());
+      this.onFrame((res.landmarks || []).map((l) => ({ x: 1 - l[8].x, y: l[8].y })));   // l[8] = 검지 끝, x는 거울 반전
+      this.errCount = 0;
+    } catch (e) {
+      if (++this.errCount === 1) console.warn('[hand] 프레임 처리 오류', e);   // 오류가 나도 게임은 계속
+      this.onFrame([]);
+    }
+  }
+
+  _releaseCamera() { this.stream?.getTracks().forEach((t) => t.stop()); this.stream = null; if (this.video) this.video.srcObject = null; }
+
+  stop() {
+    cancelAnimationFrame(this.raf); this.raf = 0; this.active = false;
+    try { this.lm?.close(); } catch {} this.lm = null;
+    this._releaseCamera();
+  }
+}
+
+
+
+
+
+
+// 게임 상태: idle → countdown → playing ⇄ paused → over
+class GameEngine {
+  constructor(canvas, ui, audio) {
+    this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.ui = ui; this.audio = audio;
+    this.fx = new Effects(); this.bombFx = 'basic'; this.lastCd = null;
+    this.state = 'idle'; this.raf = 0; this.last = 0;
+    this.objects = []; this.rings = []; this.trail = [];
+    this.pauseReasons = new Set(); this.pieces = [];
+    this.specialFx = []; this.specialReadyAt = 0;
+    this.handMode = false; this.handLastSeen = -Infinity; this.handCount = 0; this.tracks = [];
+    this._bindOnce();
+    this.resize();
+  }
+
+  // ---------- 이벤트 (한 번만 등록) ----------
+  _bindOnce() {
+    new ResizeObserver(() => this.resize()).observe(this.canvas);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.pause('auto'); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' || e.key.toLowerCase() === 'p') {
+        if (this.state === 'playing') this.pause('manual');
+        else if (this.state === 'paused') this.resume('manual');
+      }
+    });
+    // 임시 테스트 입력(마우스/터치 드래그). 3단계에서 손 추적 입력으로 대체됩니다.
+    let down = false, prev = null;
+    const pos = (e) => { const r = this.canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    this.canvas.addEventListener('pointerdown', (e) => { down = true; prev = pos(e); });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (!down || this.handMode) return;   // 카메라가 켜져 있으면 마우스 테스트 입력은 무시
+      const p = pos(e); this.slash(prev, p); prev = p;
+    });
+    const up = () => { down = false; prev = null; };
+    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }
+
+  // ---------- 손 입력 ----------
+  setHandMode(on) { this.handMode = on; this.tracks = []; this.handCount = 0; }
+  handSince() { return (performance.now() / 1000) - this.handLastSeen; }
+
+  // hands: 0~1 정규화 좌표 [{x, y}]. 손 추적 모듈이 프레임마다 호출합니다.
+  feedHands(hands) {
+    const now = performance.now() / 1000;
+    this.handCount = hands.length;
+    if (!hands.length) { this.tracks = []; return; }
+    this.handLastSeen = now;
+    const sorted = [...hands].sort((a, b) => a.x - b.x);     // 화면 왼쪽 손 = 0번, 오른쪽 손 = 1번
+    const next = sorted.map((h, i) => {
+      const raw = { x: h.x * this.w, y: h.y * this.h };
+      const prev = this.tracks[i];
+      const a = T.handSmoothing;
+      const p = prev ? { x: prev.x + (raw.x - prev.x) * a, y: prev.y + (raw.y - prev.y) * a } : raw;
+      p.t = now; p.fastAt = prev ? prev.fastAt : -Infinity;
+      p.hist = [...(prev ? prev.hist : []), { x: p.x, y: p.y, t: now }].filter((h) => now - h.t <= T.specialHistory);
+      if (prev && this.state === 'playing') {
+        const dist = Math.hypot(p.x - prev.x, p.y - prev.y), dt = Math.max(now - prev.t, 1e-3);
+        if (dist / dt >= T.minSlashSpeed * this.h) this.slash(prev, p);
+        if (dist / dt >= T.specialMinSpeed * this.h) p.fastAt = now;   // 이전→현재 선분으로 판정
+      }
+      return p;
+    });
+    this.tracks = next;
+    this._detectSpecial(next, now);
+  }
+
+  // ---------- 특수 공격 ----------
+  // 두 손의 최근 이동 방향을 화면 끝까지 늘린 선으로 만들어, 그 선에 닿는 과일을 한 번에 자릅니다.
+  // 폭탄 규칙: 특수 공격은 폭탄을 자르지도, 폭발시키지도 않습니다 (그대로 남음).
+  triggerSpecial(segs) {
+    const s = this.s, now = performance.now() / 1000;
+    if (this.state !== 'playing' || s.energy < T.energyMax || now < this.specialReadyAt) return false;
+    s.energy = 0; this.specialReadyAt = now + T.specialCooldown;
+    this.specialFx.push({ t: 0, segs });
+    this.audio.play('special'); this.fx.shake(12, 0.35); this.fx.flash('#ffffff', 0.35, 0.25);
+    for (const o of this.objects) {
+      if (o.hit || o.kind === 'bomb') continue;
+      for (const g of segs) {
+        if (segmentHitsCircle(g.x1, g.y1, g.x2, g.y2, o.x, o.y, o.r * 1.3)) { o.hit = true; this.onCut(o, Math.atan2(g.y2 - g.y1, g.x2 - g.x1)); break; }
+      }
+    }
+    this.objects = this.objects.filter((o) => !o.hit);
+    return true;
+  }
+
+  // 카메라가 없는 연습 모드용 (버튼으로 X자 베기 확인)
+  practiceSpecial() {
+    this.triggerSpecial([{ x1: 0, y1: this.h * 0.2, x2: this.w, y2: this.h * 0.85 }, { x1: this.w, y1: this.h * 0.2, x2: 0, y2: this.h * 0.85 }]);
+  }
+
+  _detectSpecial(tracks, now) {
+    if (tracks.length < 2 || this.state !== 'playing') return;
+    const [a, b] = tracks;
+    if (now - a.fastAt > T.specialSimulWindow || now - b.fastAt > T.specialSimulWindow) return;
+    if (Math.abs(a.fastAt - b.fastAt) > T.specialSimulWindow) return;      // 두 손이 동시에 빨라야 함
+    const ext = (tr) => {
+      const f = tr.hist[0], l = tr.hist[tr.hist.length - 1];
+      let dx = l.x - f.x, dy = l.y - f.y; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+      const L = Math.max(this.w, this.h) * 1.5;
+      return { x1: l.x - dx * L, y1: l.y - dy * L, x2: l.x + dx * L, y2: l.y + dy * L };
+    };
+    this.triggerSpecial([ext(a), ext(b)]);
+  }
+
+  resize() {
+    const r = this.canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    this.w = r.width; this.h = r.height;
+    this.canvas.width = Math.max(1, r.width * dpr); this.canvas.height = Math.max(1, r.height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // ---------- 시작 / 종료 ----------
+  start(modeId) {
+    this.stop();
+    this.modeId = modeId; this.mode = MODES[modeId];
+    this.objects = []; this.rings = []; this.trail = []; this.pieces = []; this.specialFx = []; this.specialReadyAt = 0; this.fx.reset(); this.lastCd = null;
+    this.pauseReasons.clear();
+    this.s = { score: 0, cut: 0, missed: 0, bombs: 0, combo: 0, maxCombo: 0, comboTimer: 0, energy: 0,
+               lives: this.mode.lives, timeLeft: this.mode.timeLimit, elapsed: 0, spawnTimer: 0.6, slowLeft: 0 };
+    this.state = 'countdown'; this.cd = T.countdownSeconds + T.goDisplaySeconds;
+    this.resize(); this.ui.hideModals(); this.ui.updateHud(this.s, this.mode, { practice: !this.handMode });
+    this.last = performance.now();
+    this.raf = requestAnimationFrame((t) => this.loop(t));   // 루프는 항상 하나만
+  }
+
+  stop() { this.audio.stopBgm(); cancelAnimationFrame(this.raf); this.raf = 0; this.state = 'idle'; this.ui.setCountdown(''); }
+
+  pause(reason) {
+    if (this.state !== 'playing' && this.state !== 'countdown') return;
+    if (this.state === 'countdown' && reason === 'auto') { /* 카운트다운 중에도 정지 */ }
+    this.pauseReasons.add(reason);
+    if (this.state !== 'paused') { this.prevState = this.state; this.state = 'paused'; this.audio.stopBgm(); this.ui.showPause(true, reason); }
+  }
+  resume(reason) {
+    this.pauseReasons.delete(reason);
+    if (this.state === 'paused' && this.pauseReasons.size === 0) {
+      this.state = this.prevState; if (this.state === 'playing') this.audio.startBgm(); this.last = performance.now(); this.tracks = [];
+      if (this.handMode) this.handLastSeen = Math.max(this.handLastSeen, performance.now() / 1000 - T.handLostPause + 1);   // 재개 직후 1초 여유 this.ui.showPause(false);
+    }
+  }
+  // 자동 정지는 사용자가 "계속하기"를 눌러야 풀립니다.
+  resumeAll() { this.pauseReasons.clear(); this.resume('manual'); }
+
+  end(reason) {
+    this.state = 'over'; this.audio.stopBgm();
+    const s = this.s, total = s.cut + s.missed;
+    const accuracy = total === 0 ? 0 : Math.round((s.cut / total) * 100);
+    const isRecord = storage.setBest(this.modeId, s.score) && s.score > 0;
+    this.audio.play(isRecord ? 'record' : 'gameOver');
+    this.ui.showResult({ ...s, accuracy, isRecord, reason, modeName: this.mode.name });
+  }
+
+  // ---------- 메인 루프 ----------
+  loop(now) {
+    this.raf = requestAnimationFrame((t) => this.loop(t));
+    const dt = Math.min((now - this.last) / 1000, T.maxDeltaTime);
+    this.last = now;
+    if (this.state === 'playing' && this.handMode && this.handSince() > T.handLostPause) this.pause('hand');
+    if (this.state === 'countdown') this.tickCountdown(dt);
+    else if (this.state === 'playing') this.update(dt);
+    this.draw();
+  }
+
+  tickCountdown(dt) {
+    this.cd -= dt;
+    if (this.cd <= T.goDisplaySeconds) {                    // GO! 와 동시에 게임·타이머·배경음 시작
+      this.ui.setCountdown('GO!'); this.goT = T.goDisplaySeconds;
+      this.audio.play('go'); this.audio.startBgm(); this.state = 'playing';
+    } else {
+      const n = Math.ceil(this.cd - T.goDisplaySeconds);
+      this.ui.setCountdown(String(n));
+      if (n !== this.lastCd) { this.lastCd = n; this.audio.play('tick'); }
+    }
+  }
+
+  update(dt) {
+    const s = this.s; s.elapsed += dt;
+    if (s.timeLeft !== null) { s.timeLeft = Math.max(0, s.timeLeft - dt); if (s.timeLeft === 0) return this.end('time'); }
+    if (s.comboTimer > 0) { s.comboTimer -= dt; if (s.comboTimer <= 0) s.combo = 0; }
+    if (this.goT > 0 && (this.goT -= dt) <= 0) this.ui.setCountdown('');
+    this.fx.update(dt, this.h);
+    if (s.slowLeft > 0) s.slowLeft = Math.max(0, s.slowLeft - dt);
+    const od = dt * (s.slowLeft > 0 ? T.iceSlow : 1);   // 얼음 효과: 과일·조각만 느려짐 (타이머는 그대로)
+
+    // 스폰
+    s.spawnTimer -= od;
+    if (s.spawnTimer <= 0 && this.objects.length < T.maxObjects) {
+      this.spawnWave();
+      const ramp = this.mode.ramp ? s.elapsed * T.rampPerSecond : s.elapsed * T.rampPerSecond * 0.4;
+      s.spawnTimer = Math.max(T.spawnIntervalMin, T.spawnIntervalStart - ramp);
+    }
+
+    // 움직임 + 화면 밖 정리
+    const g = T.gravity * this.h;
+    for (const o of this.objects) { o.vy += g * od; o.x += o.vx * od; o.y += o.vy * od; o.rot += o.spin * od; }
+    this.objects = this.objects.filter((o) => {
+      const out = o.y - o.r > this.h && o.vy > 0;
+      if (out && o.kind === 'fruit') s.missed++;   // 놓친 일반 과일: 통계만 증가
+      return !out;
+    });
+    for (const q of this.pieces) { q.vy += g * od; q.x += q.vx * od; q.y += q.vy * od; q.rot += q.spin * od; q.life += dt; q.lock -= dt; }
+    for (const f of this.specialFx) f.t += dt;
+    this.specialFx = this.specialFx.filter((f) => f.t < T.specialFxTime);
+    this.pieces = this.pieces.filter((q) => q.life < T.pieceLife && q.y - q.r < this.h);   // 오래됐거나 화면 밖이면 제거
+    for (const r of this.rings) { r.t += dt; }
+    this.rings = this.rings.filter((r) => r.t < 0.4);
+    this.trail = this.trail.filter((p) => (performance.now() - p.t) < 140);   // 궤적은 짧게
+    this.ui.updateHud(s, this.mode, { practice: !this.handMode });
+    if (s.lives !== null && s.lives <= 0) this.end('lives');
+  }
+
+  spawnWave() {
+    const n = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n && this.objects.length < T.maxObjects; i++) {
+      const r0 = Math.random(); let kind = 'fruit';
+      if (r0 < T.bombChance) kind = 'bomb'; else if (r0 < T.bombChance + T.goldChance) kind = 'gold'; else if (r0 < T.bombChance + T.goldChance + T.iceChance) kind = 'ice';
+      const R = Math.max(26, Math.min(this.w, this.h) * 0.07);
+      const x = R + Math.random() * (this.w - 2 * R);
+      const apex = this.h * (0.55 + Math.random() * 0.25);
+      const vy = -Math.sqrt(2 * T.gravity * this.h * apex);
+      const vx = (this.w / 2 - x) * (0.2 + Math.random() * 0.3);
+      this.objects.push({ kind, x, y: this.h + R, vx, vy, r: R, rot: 0, spin: (Math.random() - 0.5) * 4,
+                          fruit: kind === 'ice' ? { emoji: '🧊' } : FRUITS[Math.floor(Math.random() * FRUITS.length)], hit: false });
+    }
+  }
+
+  // ---------- 절단 ----------
+  slash(a, b) {
+    if (this.state !== 'playing') return;
+    this.trail.push({ x: b.x, y: b.y, t: performance.now() });
+    for (const o of this.objects) {
+      if (o.hit) continue;                                   // 중복 처리 방지
+      if (segmentHitsCircle(a.x, a.y, b.x, b.y, o.x, o.y, o.r)) { o.hit = true; this.onCut(o, Math.atan2(b.y - a.y, b.x - a.x)); }
+    }
+    this.objects = this.objects.filter((o) => !o.hit);
+    const ang = Math.atan2(b.y - a.y, b.x - a.x), hitPieces = [];
+    for (const q of this.pieces) {                           // 조각도 선분이 통과하면 다시 잘림
+      if (q.hit || q.lock > 0 || q.gen >= T.pieceMaxGen) continue;
+      const cr = Math.cos(q.rot), sr = Math.sin(q.rot);
+      if (segmentHitsCircle(a.x, a.y, b.x, b.y, q.x + cr * q.cx - sr * q.cy, q.y + sr * q.cx + cr * q.cy, q.hr)) hitPieces.push(q);
+    }
+    for (const q of hitPieces) this.cutPiece(q, ang);
+    if (hitPieces.length) this.pieces = this.pieces.filter((q) => !q.hit);
+  }
+
+  onCut(o, angle) {
+    const s = this.s;
+    this.rings.push({ x: o.x, y: o.y, r: o.r, t: 0, kind: o.kind });
+    if (o.kind === 'bomb') {
+      s.bombs++; s.combo = 0;
+      if (this.mode.bombScore) s.score = Math.max(0, s.score + this.mode.bombScore);
+      if (s.lives !== null) s.lives--;
+      this.bombEffect(o);
+      return;
+    }
+    this.spawnPieces(o, angle);
+    if (o.kind === 'ice') { s.slowLeft = T.iceDuration; this.rings.push({ x: o.x, y: o.y, r: o.r * 1.9, t: 0, kind: 'ice' }); }
+    s.cut++; s.combo++; s.comboTimer = T.comboWindow; s.maxCombo = Math.max(s.maxCombo, s.combo);
+    const base = o.kind === 'gold' ? T.goldScore : T.fruitScore;
+    s.score += base + Math.floor(s.combo / 3) * 5;          // 3콤보마다 +5 보너스
+    const eBefore = s.energy;
+    s.energy = Math.min(T.energyMax, s.energy + (o.kind === 'gold' ? T.energyGold : T.energyPerFruit) + Math.floor(s.combo / 5) * T.energyComboBonus);
+    this.cutFx(o, angle, eBefore);
+  }
+
+  cutFx(o, angle, eBefore) {
+    const s = this.s;
+    const col = o.kind === 'gold' ? '#ffd34d' : o.kind === 'ice' ? '#9fe8ff' : (o.fruit.color || '#ff5a5a');
+    this.fx.juice(o.x, o.y, col, angle);
+    if (o.kind === 'gold') { this.fx.sparkle(o.x, o.y, '#ffe27a', 16); this.audio.play('gold'); }
+    else if (o.kind === 'ice') { this.fx.sparkle(o.x, o.y, '#d8f6ff', 18); this.audio.play('ice'); }
+    else this.audio.play('slice', Math.min(s.combo, 10));
+    if (s.combo >= 3) this.audio.play('combo', s.combo);
+    if (s.combo >= 5 && s.combo % 5 === 0) { this.fx.showBanner(`${s.combo} 콤보!`, '#ffb627'); this.fx.shake(s.combo >= 10 ? 9 : 5, 0.25); }
+    if (eBefore < T.energyMax && s.energy >= T.energyMax) { this.audio.play('energy'); this.fx.showBanner('특수 공격 준비!', '#3ef0e0'); }
+  }
+
+  // 폭탄: 기본은 짧은 경고(붉은 번쩍임), 설정에서 화려한 폭발형 선택 가능
+  bombEffect(o) {
+    this.audio.play('bomb'); this.fx.showBanner('폭탄!', '#ff3d71');
+    if (this.bombFx === 'fancy') {
+      this.fx.burst(o.x, o.y, '#ffb627', 40, { speed: 520, size: 6, life: 0.8 }); this.fx.burst(o.x, o.y, '#ff3d71', 30, { speed: 380, size: 5 });
+      this.fx.flash('#ffb627', 0.55, 0.5); this.fx.shake(18, 0.5);
+    } else { this.fx.flash('#ff3d71', 0.25, 0.25); this.fx.shake(6, 0.2); }
+  }
+
+  // 베는 방향을 따라 과일(또는 조각)을 둘로 나눕니다. 조각도 다시 자를 수 있어서, 잘린 선(clips)을 계속 쌓아 그립니다.
+  spawnPieces(o, angle) {
+    this.splitInto({ kind: o.kind, fruit: o.fruit, x: o.x, y: o.y, r: o.r, rot: o.rot, vx: o.vx, vy: o.vy, spin: o.spin,
+      clips: [], cx: 0, cy: 0, hr: o.r, gen: 0, life: 0 }, angle);
+  }
+
+  splitInto(p, angle) {
+    const a = angle - p.rot;                                    // 베기선 각도 (과일 기준)
+    const lx = Math.sin(a), ly = -Math.cos(a);                  // side=+1 조각이 있는 쪽 (과일 기준)
+    const wx = Math.sin(angle), wy = -Math.cos(angle);          // 같은 방향 (화면 기준)
+    for (const side of [1, -1]) {
+      if (this.pieces.length >= T.maxPieces) this.pieces.shift();
+      this.pieces.push({ kind: p.kind, fruit: p.fruit, x: p.x, y: p.y, r: p.r, rot: p.rot, life: p.life, lock: 0.12, gen: p.gen + 1,
+        clips: [...p.clips, { a, px: p.cx, py: p.cy, side }],
+        cx: p.cx + lx * side * p.hr * 0.45, cy: p.cy + ly * side * p.hr * 0.45, hr: p.hr * 0.65,   // 조각의 대략적인 중심과 판정 반지름
+        vx: p.vx * 0.6 + wx * side * this.h * 0.2, vy: p.vy * 0.4 + wy * side * this.h * 0.2 - this.h * 0.06,
+        spin: (p.spin || 0) * 0.5 + side * (2 + Math.random() * 3) });
+    }
+  }
+
+  // 이미 잘린 조각을 다시 자릅니다. 점수는 작게, '자른 과일 수'와 콤보는 올리지 않습니다 (과일 하나당 1회로 통계 유지).
+  cutPiece(q, angle) {
+    const cr = Math.cos(q.rot), sr = Math.sin(q.rot), x = q.x + cr * q.cx - sr * q.cy, y = q.y + sr * q.cx + cr * q.cy;
+    q.hit = true; this.splitInto(q, angle);
+    this.s.score += T.pieceScore;
+    this.fx.juice(x, y, q.kind === 'gold' ? '#ffd34d' : q.kind === 'ice' ? '#9fe8ff' : (q.fruit.color || '#ff5a5a'), angle);
+    this.audio.play('slice', 6);
+  }
+
+  // ---------- 그리기 ----------
+  draw() {
+    const c = this.ctx; c.clearRect(0, 0, this.w, this.h);
+    c.save(); const [sx, sy] = this.fx.offset(); c.translate(sx, sy);   // 화면 흔들림
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const o of this.objects) {
+      c.save(); c.translate(o.x, o.y); c.rotate(o.rot);
+      if (o.kind === 'gold') { c.shadowColor = '#ffb627'; c.shadowBlur = 28; }
+      if (o.kind === 'bomb') { c.shadowColor = '#ff3d71'; c.shadowBlur = 18; }
+      if (o.kind === 'ice') { c.shadowColor = '#9fe8ff'; c.shadowBlur = 26; }
+      drawSprite(c, o, 'whole', o.r);
+      if (o.kind === 'gold') { c.lineWidth = 3; c.strokeStyle = '#ffb627'; c.beginPath(); c.arc(0, 0, o.r, 0, 7); c.stroke(); }
+      c.restore();
+    }
+    for (const q of this.pieces) {
+      const fade = Math.min(1, (T.pieceLife - q.life) / 0.4);
+      c.save(); c.globalAlpha = Math.max(0, fade); c.translate(q.x, q.y); c.rotate(q.rot);
+      if (q.kind === 'gold') { c.shadowColor = '#ffb627'; c.shadowBlur = 22; }
+      if (q.kind === 'ice') { c.shadowColor = '#9fe8ff'; c.shadowBlur = 20; }
+      const big = q.r * 2.5;
+      for (const k of q.clips) {                                  // 잘린 선마다 한쪽만 남김
+        c.translate(k.px, k.py); c.rotate(k.a);
+        c.beginPath(); c.rect(-big, k.side > 0 ? -big : 0.5, big * 2, big - 0.5); c.clip();
+        c.rotate(-k.a); c.translate(-k.px, -k.py);
+      }
+      drawSprite(c, q, 'inner', q.r);
+      c.restore();
+    }
+    for (const r of this.rings) {
+      const k = r.t / 0.4; c.globalAlpha = 1 - k; c.lineWidth = 4;
+      c.strokeStyle = r.kind === 'bomb' ? '#ff3d71' : r.kind === 'gold' ? '#ffb627' : r.kind === 'ice' ? '#9fe8ff' : '#3ef0e0';
+      c.beginPath(); c.arc(r.x, r.y, r.r * (1 + k), 0, 7); c.stroke(); c.globalAlpha = 1;
+    }
+    for (const f of this.specialFx) {                      // 특수 공격: 화면을 가로지르는 넓은 교차 베기
+      const k = f.t / T.specialFxTime; c.globalAlpha = 1 - k; c.lineCap = 'round';
+      for (const [w, col] of [[34 * (1 - k * 0.5), 'rgba(62,240,224,.35)'], [12, '#ffffff']]) {
+        c.strokeStyle = col; c.lineWidth = w; c.beginPath();
+        for (const s of f.segs) { c.moveTo(s.x1, s.y1); c.lineTo(s.x2, s.y2); }
+        c.stroke();
+      }
+      c.globalAlpha = 1;
+    }
+    if (this.s && this.s.slowLeft > 0) {                   // 얼음 효과 표시 (색 + 글자)
+      c.fillStyle = 'rgba(120,200,255,0.12)'; c.fillRect(0, 0, this.w, this.h);
+      c.fillStyle = '#9fe8ff'; c.font = '700 18px sans-serif'; c.fillText(`얼음! 느려지는 중 ${this.s.slowLeft.toFixed(1)}초`, this.w / 2, 24);
+    }
+    if (this.trail.length > 1) {
+      c.lineCap = 'round'; c.strokeStyle = '#3ef0e0'; c.shadowColor = '#3ef0e0'; c.shadowBlur = 12; c.lineWidth = 5;
+      c.beginPath(); c.moveTo(this.trail[0].x, this.trail[0].y);
+      for (const p of this.trail) c.lineTo(p.x, p.y);
+      c.stroke(); c.shadowBlur = 0;
+    }
+    this.fx.draw(c);
+    c.restore();
+    this.fx.drawOverlay(c, this.w, this.h);
+  }
+}
+
+// 화면 전환, HUD, 모달을 담당합니다. 게임 규칙은 모릅니다.
+const $ = (id) => document.getElementById(id);
+
+const ui = {
+  showScreen(name) {
+    document.querySelectorAll('.screen').forEach((el) => el.classList.toggle('active', el.id === `screen-${name}`));
+  },
+  setCountdown(text) { $('countdown').textContent = text; },
+  hideModals() { $('pause').hidden = true; $('result').hidden = true; },
+  showPause(on, reason) {
+    $('pause').hidden = !on;
+    if (!on) return;
+    $('pause-title').textContent = reason === 'hand' ? '손이 보이지 않아요' : '일시 정지';
+    $('pause-msg').textContent = reason === 'hand' ? '카메라 앞에 손을 보여 주세요.' : '';
+    $('btn-resume').focus();
+  },
+  setPauseMsg(text) { $('pause-msg').textContent = text; },
+  setCamStatus(text) { $('cam-status').textContent = text; },
+  setCamButton(on) { $('btn-cam').textContent = on ? '카메라 끄기' : '카메라 켜고 손 인식 테스트'; },
+  setHandStatus(text, kind) { const el = $('hud-hand'); el.textContent = text; el.dataset.kind = kind; },
+  showPreview(on) { $('preview').hidden = !on; },
+  setPreviewVisible(on) { $('set-preview').checked = on; $('preview').classList.toggle('dim', !on); $('btn-preview').textContent = on ? '미리보기 숨기기' : '미리보기 보기'; },
+  drawDots(hands) {
+    const c = $('cam-dots'), x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+    x.fillStyle = '#3ef0e0';
+    for (const h of hands) { x.beginPath(); x.arc(h.x * c.width, h.y * c.height, 6, 0, 7); x.fill(); }
+  },
+  updateHud(s, mode, opts = {}) {
+    $('hud-score').textContent = s.score;
+    $('hud-combo').textContent = s.combo;
+    $('hud-energy').style.width = `${s.energy}%`;
+    const full = s.energy >= 100;
+    $('hud-energy-box').classList.toggle('full', full);
+    $('hud-energy-label').textContent = full ? '특수 공격 준비!' : '에너지';
+    $('btn-special').hidden = !(full && opts.practice);
+    const timed = s.timeLeft !== null, lives = s.lives !== null;
+    $('hud-limit-label').textContent = timed && lives ? '시간 · 목숨' : timed ? '시간' : '목숨';
+    const t = timed ? `${Math.ceil(s.timeLeft)}초` : '';
+    const l = lives ? '♥'.repeat(Math.max(0, s.lives)) || '✕' : '';
+    $('hud-limit').textContent = [t, l].filter(Boolean).join(' ');
+  },
+  showResult(r) {
+    $('result-title').textContent = r.reason === 'time' ? '시간 종료' : '게임 오버';
+    $('result-record').hidden = !r.isRecord;
+    const rows = [['모드', r.modeName], ['최종 점수', r.score], ['자른 과일', r.cut], ['놓친 과일', r.missed],
+                  ['폭탄 실수', r.bombs], ['최고 콤보', r.maxCombo], ['정확도', `${r.accuracy}%`]];
+    $('result-stats').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    $('result').hidden = false; $('btn-retry').focus();
+  },
+};
+
+{
+
+
+
+
+
+
+const $m = (id) => document.getElementById(id);
+const audio = new AudioManager();
+const engine = new GameEngine($m('stage'), ui, audio);
+const tracker = new HandTracker();
+let modeId = storage.getSettings().lastMode || 'timeattack';
+if (!MODES[modeId]) modeId = 'timeattack';
+let statusTimer = 0;
+
+const CAM_ERRORS = {
+  denied: '카메라 권한이 거부됐어요. 주소창 왼쪽의 자물쇠(또는 카메라) 아이콘에서 카메라를 "허용"으로 바꾼 뒤 다시 눌러 주세요.',
+  nocamera: '카메라를 찾지 못했어요. 웹캠이 연결되어 있는지 확인해 주세요.',
+  busy: '다른 앱(화상 회의, 카메라 앱 등)이 카메라를 쓰고 있어요. 그 앱을 끄고 다시 눌러 주세요.',
+  'lib-load': '손 인식 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요. (F12 → 콘솔에서 원인을 볼 수 있어요)',
+  insecure: '이 주소에서는 카메라를 쓸 수 없어요. https:// 로 시작하는 주소(또는 localhost)에서 열어 주세요.',
+  'camera-other': '카메라를 켜지 못했어요. 브라우저를 새로고침한 뒤 다시 시도해 주세요.',
+};
+
+function refreshStart() {
+  document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === modeId)));
+  $m('best-line').textContent = `${MODES[modeId].name} 최고 기록: ${storage.getBest(modeId)}점`;
+}
+
+function statusTick() {
+  if (!tracker.active) return;
+  const since = engine.handSince();
+  if (since < 0.3) ui.setHandStatus(`손 인식 중 (${engine.handCount}개)`, 'ok');
+  else if (engine.state === 'paused' || since >= T.handLostPause && engine.state === 'playing') ui.setHandStatus('일시 정지 필요', 'bad');
+  else ui.setHandStatus('손을 찾는 중', 'warn');
+  ui.setCamStatus(since < 0.3 ? `손이 인식되고 있어요 (${engine.handCount}개). 검지를 움직여 보세요.` : '카메라 앞에 손을 보여 주세요. (손을 찾는 중)');
+  if (engine.state === 'paused' && engine.pauseReasons.has('hand') && since < 0.3) ui.setPauseMsg('손이 다시 보여요. "계속하기"를 눌러 주세요.');
+}
+
+async function enableCamera() {
+  if (tracker.active) return true;
+  $m('btn-cam').disabled = true;
+  tracker.onPhase = (t) => ui.setCamStatus(t);
+  tracker.onFrame = (hands) => { engine.feedHands(hands); ui.drawDots(hands); };
+  try {
+    await tracker.start($m('cam-video'));
+  } catch (e) {
+    console.error('[카메라]', e.code, e.message, e.cause || '');
+    ui.setCamStatus(CAM_ERRORS[e.code] || CAM_ERRORS['camera-other']);
+    $m('btn-cam').disabled = false;
+    return false;
+  }
+  engine.setHandMode(true); ui.showPreview(true); ui.setPreviewVisible(storage.getSettings().preview !== false);
+  ui.setCamButton(true); ui.setHandStatus('손을 찾는 중', 'warn');
+  statusTimer = setInterval(statusTick, 200);
+  $m('btn-cam').disabled = false;
+  return true;
+}
+
+function disableCamera() {
+  clearInterval(statusTimer); tracker.stop(); engine.setHandMode(false);
+  ui.showPreview(false); ui.setCamButton(false); ui.drawDots([]);
+  ui.setHandStatus('손 인식: 꺼짐', 'off');
+  ui.setCamStatus('카메라가 꺼져 있어요. 손 인식으로 게임하려면 카메라를 켜 주세요.');
+}
+
+function goHome() { engine.stop(); ui.hideModals(); disableCamera(); ui.showScreen('start'); refreshStart(); }
+function play() { ui.showScreen('game'); engine.start(modeId); }
+
+document.querySelectorAll('.mode').forEach((b) => b.addEventListener('click', () => {
+  modeId = b.dataset.mode; storage.setSettings({ lastMode: modeId }); refreshStart();
+}));
+$m('btn-cam').addEventListener('click', () => (tracker.active ? disableCamera() : enableCamera()));
+$m('btn-preview').addEventListener('click', () => {
+  const show = $m('preview').classList.contains('dim');     // 숨겨도 손 추적은 계속 동작
+  ui.setPreviewVisible(show); storage.setSettings({ preview: show });
+});
+// ---- 설정: 바꾸면 바로 게임에 반영되고 저장됩니다 ----
+function applySettings() {
+  const st = storage.getSettings();
+  const bgm = st.bgm !== false, sfx = st.sfx !== false, preview = st.preview !== false, bombFx = st.bombFx === 'fancy' ? 'fancy' : 'basic';
+  audio.setBgm(bgm); audio.setSfx(sfx); engine.bombFx = bombFx;
+  $m('set-bgm').checked = bgm; $m('set-sfx').checked = sfx; $m('set-preview').checked = preview;
+  document.querySelector(`input[name="bombfx"][value="${bombFx}"]`).checked = true;
+  if (tracker.active) ui.setPreviewVisible(preview);
+}
+function openSettings() {
+  $m('set-cam').textContent = tracker.active ? `카메라 상태: 켜짐 · 손 ${engine.handCount}개 인식 중` : '카메라 상태: 꺼짐';
+  applySettings(); $m('settings').hidden = false; $m('btn-settings-close').focus();
+}
+$m('btn-settings').addEventListener('click', openSettings);
+$m('btn-settings-pause').addEventListener('click', openSettings);
+$m('btn-settings-close').addEventListener('click', () => { $m('settings').hidden = true; });
+$m('set-bgm').addEventListener('change', (e) => { storage.setSettings({ bgm: e.target.checked }); audio.setBgm(e.target.checked); if (e.target.checked && engine.state === 'playing') audio.startBgm(); });
+$m('set-sfx').addEventListener('change', (e) => { storage.setSettings({ sfx: e.target.checked }); audio.setSfx(e.target.checked); });
+$m('set-preview').addEventListener('change', (e) => { storage.setSettings({ preview: e.target.checked }); if (tracker.active) ui.setPreviewVisible(e.target.checked); });
+document.querySelectorAll('input[name="bombfx"]').forEach((r) => r.addEventListener('change', () => { storage.setSettings({ bombFx: r.value }); engine.bombFx = r.value; }));
+window.addEventListener('pointerdown', () => audio.unlock());     // 첫 터치/클릭 이후 소리 허용
+window.addEventListener('keydown', () => audio.unlock());
+
+$m('btn-special').addEventListener('click', () => engine.practiceSpecial());
+$m('btn-start').addEventListener('click', play);
+$m('btn-pause').addEventListener('click', () => engine.pause('manual'));
+$m('btn-resume').addEventListener('click', () => engine.resumeAll());
+$m('btn-quit').addEventListener('click', goHome);
+$m('btn-retry').addEventListener('click', play);
+$m('btn-home').addEventListener('click', goHome);
+window.addEventListener('pagehide', () => tracker.stop());
+
+window.__game = { engine, tracker };   // 개발자 도구(F12) 콘솔에서 확인용
+applySettings();
+refreshStart();
+console.info('[검지 베기] 실행 준비 완료');
+
+}
+</script>
+</body>
+</html>
